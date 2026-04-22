@@ -4,8 +4,8 @@ coverage_server:
     default_headland_width: 0.25
     robot_width: 0.7
     operation_width: 0.7
-    min_turning_radius: 0.35
-    linear_curv_change: 200.0
+    min_turning_radius: 0.0
+    linear_curv_change: 1000000.0
     coordinates_in_cartesian_frame: true
     default_allow_overlap: false
     default_swath_angle_type: "SET_ANGLE"

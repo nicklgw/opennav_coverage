@@ -234,6 +234,9 @@ void CoverageServer::computeCoveragePath()
       field, field_no_headland, master_field.getRefPoint(),
       util::toCartesianNavPathMsg(path, header, path_gen_->getTurnPointDistance()),
       swaths, header);
+    
+    visualizer_->visualize_coverage_path(result->coverage_path, header);
+    
     action_server_->succeeded_current(result);
   } catch (CoverageException & e) {
     RCLCPP_ERROR(get_logger(), "Invalid mode set: %s", e.what());
