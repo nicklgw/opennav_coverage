@@ -16,7 +16,6 @@
 
 using namespace std::chrono_literals;
 using rcl_interfaces::msg::ParameterType;
-using std::placeholders::_1;
 
 namespace opennav_coverage_task
 {
@@ -33,6 +32,11 @@ CoverageTask::on_configure(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_INFO(get_logger(), "Configuring %s", get_name());
   auto node = shared_from_this();
 
+  { // 初始化field_polygon_，避免在后续使用时出现空指针
+    auto polygon_msg = std::make_shared<geometry_msgs::msg::PolygonStamped>();
+    polygon_msg->polygon.points.push_back(geometry_msgs::msg::Point32());
+    field_polygon_.writeFromNonRT(polygon_msg);
+  }
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -43,10 +47,8 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_INFO(get_logger(), "Activating %s", get_name());
   auto node = shared_from_this();
 
-  // visualizer_->activate(node);
-
   field_sub_ = node->create_subscription<geometry_msgs::msg::PolygonStamped>(
-    "field_polygon", rclcpp::QoS(1),
+    "/reflector_polygon", rclcpp::QoS(1),
     std::bind(&CoverageTask::fieldPolygonCallback, this, std::placeholders::_1));
 
   coverage_path_pub_ = rclcpp::create_publisher<visualization_msgs::msg::MarkerArray>(
@@ -55,16 +57,54 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
 
   coverage_client_ = rclcpp_action::create_client<opennav_coverage_msgs::action::ComputeCoveragePath>(this, "compute_coverage_path");
   through_poses_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateThroughPoses>(this, "navigate_through_poses");
-
+  
+  gen_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
+    std::string("coverage_task/gen_path"),
+    std::bind(
+      &CoverageTask::genPathCb, this,
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  
+  exe_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
+    std::string("coverage_task/exe_path"),
+    std::bind(
+      &CoverageTask::exePathCb, this,
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  
   // create bond connection
   createBond();
-
+  
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
 void CoverageTask::fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg)
 {
-  RCLCPP_INFO(get_logger(), "Received field polygon with %zu points", msg->polygon.points.size());
+  field_polygon_.writeFromNonRT(msg);
+}
+
+void CoverageTask::genPathCb(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request_header;
+  (void)request;
+  (void)response;
+  response->success = true;
+
+  RCLCPP_INFO(get_logger(), "Received request to generate coverage path");
+}
+
+void CoverageTask::exePathCb(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request_header;
+  (void)request;
+  (void)response;
+  response->success = true;
+  
+  RCLCPP_INFO(get_logger(), "Received request to execute coverage path");
 }
 
 nav2_util::CallbackReturn

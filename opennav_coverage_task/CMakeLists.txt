@@ -16,6 +16,8 @@ find_package(builtin_interfaces REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(opennav_coverage_msgs REQUIRED)
 find_package(Fields2Cover REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(realtime_tools REQUIRED)
 
 # potentially replace with nav2_common, nav2_package()
 set(CMAKE_CXX_STANDARD 17)
@@ -42,6 +44,8 @@ set(dependencies
   builtin_interfaces
   tf2_ros
   opennav_coverage_msgs
+  std_srvs
+  realtime_tools
 )
 
 add_library(${library_name} SHARED
@@ -83,6 +87,12 @@ install(TARGETS ${executable_name}
 
 install(DIRECTORY include/
   DESTINATION include/
+)
+
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 # install(FILES test/test_field.xml

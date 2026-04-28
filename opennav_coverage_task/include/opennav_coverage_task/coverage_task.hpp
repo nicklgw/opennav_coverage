@@ -15,6 +15,8 @@
 #include "geometry_msgs/msg/polygon_stamped.hpp"
 #include <visualization_msgs/msg/marker_array.hpp>
 #include "nav2_msgs/action/navigate_through_poses.hpp"
+#include <std_srvs/srv/trigger.hpp>
+#include "realtime_tools/realtime_buffer.hpp"
 
 namespace opennav_coverage_task
 {
@@ -70,7 +72,24 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr field_sub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr coverage_path_pub_;
 
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr gen_path_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr exe_path_srv_;
+
   void fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg);
+
+  void genPathCb(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+  void exePathCb(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+  realtime_tools::RealtimeBuffer<std::shared_ptr<geometry_msgs::msg::PolygonStamped>> field_polygon_;
+
+
 };
 
 }  // namespace opennav_coverage_task
