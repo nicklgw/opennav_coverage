@@ -32,13 +32,164 @@ CoverageTask::on_configure(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_INFO(get_logger(), "Configuring %s", get_name());
   auto node = shared_from_this();
 
+  declare_parameter("frequency", 20.0);
+  double frequency = get_parameter("frequency").as_double();
+  period_ms_ = 1000.0 / frequency;
+
   { // 初始化field_polygon_，避免在后续使用时出现空指针
     auto polygon_msg = std::make_shared<geometry_msgs::msg::PolygonStamped>();
     polygon_msg->polygon.points.push_back(geometry_msgs::msg::Point32());
     field_polygon_.writeFromNonRT(polygon_msg);
   }
 
+  thread_ = std::shared_ptr<std::thread>(new std::thread(&CoverageTask::run_, this));
+
   return nav2_util::CallbackReturn::SUCCESS;
+}
+
+void CoverageTask::run_()
+{
+  while (!do_stop_) 
+  {
+    auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(period_ms_);
+    
+    if (gen_path_requested_)
+    {
+      do_gen_path();
+      
+      gen_path_requested_ = false;
+    }
+    
+    if (exe_path_requested_)
+    {
+      do_exe_path();
+      
+      exe_path_requested_ = false;
+    }
+
+    semaphore_.waitUntil(end);
+  }
+}
+
+void CoverageTask::stop_()
+{
+    do_stop_ = true;
+    if (thread_.get()) {
+        thread_->join();
+        thread_.reset();
+    }
+}
+
+void CoverageTask::do_gen_path()
+{
+  geometry_msgs::msg::PolygonStamped polygon_msg = **(field_polygon_.readFromRT());
+
+  polygon_msg.header.stamp = this->now();
+  polygon_msg.header.frame_id = "map";
+  
+  polygon_msg.polygon.points.clear();
+
+  geometry_msgs::msg::Point32 point;
+
+  point.x = 0.0; point.y = 0.0; point.z = 0.0;
+  polygon_msg.polygon.points.push_back(point);
+
+  point.x = 0.0; point.y = 10.0; point.z = 0.0;
+  polygon_msg.polygon.points.push_back(point);
+
+  point.x = 15.0; point.y = 10.0; point.z = 0.0;
+  polygon_msg.polygon.points.push_back(point);
+
+  point.x = 15.0; point.y = 0.0; point.z = 0.0;
+  polygon_msg.polygon.points.push_back(point);
+
+  point.x = 0.0; point.y = 0.0; point.z = 0.0;
+  polygon_msg.polygon.points.push_back(point);
+
+  opennav_coverage_msgs::action::ComputeCoveragePath::Goal goal_;
+
+  goal_.generate_headland = true;
+  goal_.generate_route = true;
+  goal_.generate_path = true;
+  goal_.gml_field = "";
+  goal_.use_gml_file = false;
+  goal_.frame_id = "map";
+
+  goal_.polygons.clear();
+  goal_.polygons.resize(1);
+  
+  for (unsigned int j = 0; j != polygon_msg.polygon.points.size(); j++) 
+  {
+    opennav_coverage_msgs::msg::Coordinate coord;
+    coord.axis1 = polygon_msg.polygon.points[j].x;
+    coord.axis2 = polygon_msg.polygon.points[j].y;
+    goal_.polygons[0].coordinates.push_back(coord);
+  }
+
+  if (!coverage_client_->wait_for_action_server(5s)) 
+  {
+      RCLCPP_ERROR(get_logger(), "Action server not available after waiting");
+  }
+
+  auto send_goal_options = rclcpp_action::Client<opennav_coverage_msgs::action::ComputeCoveragePath>::SendGoalOptions();
+
+  send_goal_options.goal_response_callback =
+    [this](std::shared_ptr<rclcpp_action::ClientGoalHandle<opennav_coverage_msgs::action::ComputeCoveragePath>> goal_handle)
+    {
+      if (!goal_handle) 
+      {
+        RCLCPP_ERROR(get_logger(), "Goal was rejected by server");
+      } 
+      else 
+      {
+        RCLCPP_INFO(get_logger(), "Goal accepted by server");
+      }
+    };
+
+  send_goal_options.feedback_callback =
+    [this](rclcpp_action::ClientGoalHandle<opennav_coverage_msgs::action::ComputeCoveragePath>::SharedPtr,
+            const std::shared_ptr<const opennav_coverage_msgs::action::ComputeCoveragePath::Feedback> feedback)
+    {
+      if (feedback) 
+      {
+        RCLCPP_INFO(get_logger(), "Received feedback");
+      }
+    };
+
+  send_goal_options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<opennav_coverage_msgs::action::ComputeCoveragePath>::WrappedResult & result)
+    {
+      switch (result.code) 
+      {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        RCLCPP_INFO(get_logger(), "Goal succeeded");
+        break;
+      case rclcpp_action::ResultCode::ABORTED:
+        RCLCPP_ERROR(get_logger(), "Goal was aborted");
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        RCLCPP_ERROR(get_logger(), "Goal was canceled");
+        break;
+      default:
+        RCLCPP_ERROR(get_logger(), "Unknown result code");
+        break;
+      }
+
+      // Print a brief summary if the action defines a result
+      if (result.result) 
+      {
+        RCLCPP_INFO(get_logger(), "Result received error_code: %u ", result.result->error_code);
+
+        coverage_path_swaths_ = result.result->coverage_path.swaths;
+      }
+    };
+
+    coverage_client_->async_send_goal(goal_, send_goal_options);
+}
+
+void CoverageTask::do_exe_path()
+{
+  
 }
 
 nav2_util::CallbackReturn
@@ -89,6 +240,9 @@ void CoverageTask::genPathCb(
   (void)request_header;
   (void)request;
   (void)response;
+  
+  gen_path_requested_ = true;
+
   response->success = true;
 
   RCLCPP_INFO(get_logger(), "Received request to generate coverage path");
@@ -111,6 +265,8 @@ nav2_util::CallbackReturn
 CoverageTask::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Deactivating %s", get_name());
+
+  stop_();
 
   // destroy bond connection
   destroyBond();

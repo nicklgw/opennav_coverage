@@ -14,3 +14,4 @@ coverage_server:
 coverage_task:
   ros__parameters:
     use_sim_time: True
+    frequency: 10.0

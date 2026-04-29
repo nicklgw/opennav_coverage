@@ -17,6 +17,7 @@
 #include "nav2_msgs/action/navigate_through_poses.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include "realtime_tools/realtime_buffer.hpp"
+#include "semaphore.hpp"
 
 namespace opennav_coverage_task
 {
@@ -88,8 +89,23 @@ private:
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
   realtime_tools::RealtimeBuffer<std::shared_ptr<geometry_msgs::msg::PolygonStamped>> field_polygon_;
+  
+  std::shared_ptr<std::thread> thread_;
+  volatile bool do_stop_{false};
+  int period_ms_{100};
 
+  void run_();
+  void stop_();
 
+  details::Semaphore semaphore_;
+
+  std::atomic_bool gen_path_requested_{false};
+  std::vector<opennav_coverage_msgs::msg::Swath> coverage_path_swaths_;
+
+  std::atomic_bool exe_path_requested_{false};
+
+  void do_gen_path();
+  void do_exe_path();
 };
 
 }  // namespace opennav_coverage_task
