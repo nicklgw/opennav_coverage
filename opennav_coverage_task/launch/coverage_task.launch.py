@@ -24,46 +24,12 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
-    coverage_demo_dir = get_package_share_directory('opennav_coverage_task')
+    coverage_task_dir = get_package_share_directory('opennav_coverage_task')
 
-    world = os.path.join(coverage_demo_dir, 'blank.world')
-    param_file_path = os.path.join(coverage_demo_dir, 'config', 'coverage_task.yaml')
-    sdf = os.path.join(nav2_bringup_dir, 'worlds', 'waffle.model')
-
-    # start the simulation
-    start_gazebo_server_cmd = ExecuteProcess(
-        cmd=['gzserver', '-s', 'libgazebo_ros_init.so',
-             '-s', 'libgazebo_ros_factory.so', world],
-        cwd=[coverage_demo_dir], output='screen')
-
-    # start_gazebo_client_cmd = ExecuteProcess(
-    #     cmd=['gzclient'],
-    #     cwd=[coverage_demo_dir], output='screen')
-
-    urdf = os.path.join(nav2_bringup_dir, 'urdf', 'turtlebot3_waffle.urdf')
-    with open(urdf, 'r') as infp:
-        robot_description = infp.read()
-
-    start_robot_state_publisher_cmd = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='robot_state_publisher',
-        output='screen',
-        parameters=[{'use_sim_time': True,
-                     'robot_description': robot_description}])
-
-    start_gazebo_spawner_cmd = Node(
-        package='gazebo_ros',
-        executable='spawn_entity.py',
-        output='screen',
-        arguments=[
-            '-entity', 'tb3',
-            '-file', sdf,
-            '-x', '0.0', '-y', '0.0', '-z', '0.10',
-            '-R', '0.0', '-P', '0.0', '-Y', '0.0'])
+    param_file_path = os.path.join(coverage_task_dir, 'config', 'coverage_task.yaml')
 
     # start the visualization
-    rviz_config = os.path.join(coverage_demo_dir, 'opennav_coverage_demo.rviz')
+    rviz_config = os.path.join(coverage_task_dir, 'rviz', 'opennav_coverage_task.rviz')
     # print("rviz_config:", rviz_config)
     rviz_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -73,30 +39,10 @@ def generate_launch_description():
     # start navigation
     bringup_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(coverage_demo_dir, 'launch', 'bringup.launch.py')),
+            os.path.join(coverage_task_dir, 'launch', 'bringup.launch.py')),
         launch_arguments={'params_file': param_file_path}.items())
 
-    # world->odom transform, no localization. For visualization & controller transform
-    fake_localization_cmd = Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            output='screen',
-            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'])
-
-    # start the demo task
-    demo_cmd = Node(
-        package='opennav_coverage_task',
-        executable='demo_coverage',
-        emulate_tty=True,
-        output='screen')
-
     ld = LaunchDescription()
-    # ld.add_action(start_gazebo_server_cmd)
-    # ld.add_action(start_gazebo_client_cmd)
-    # ld.add_action(start_robot_state_publisher_cmd)
-    # ld.add_action(start_gazebo_spawner_cmd)
-    # ld.add_action(rviz_cmd)
+    ld.add_action(rviz_cmd)
     ld.add_action(bringup_cmd)
-    # ld.add_action(fake_localization_cmd)
-    # ld.add_action(demo_cmd)
     return ld
