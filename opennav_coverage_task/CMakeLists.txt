@@ -18,6 +18,7 @@ find_package(opennav_coverage_msgs REQUIRED)
 find_package(Fields2Cover REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(realtime_tools REQUIRED)
+find_package(nlohmann_json 3.6.0 REQUIRED)
 
 # potentially replace with nav2_common, nav2_package()
 set(CMAKE_CXX_STANDARD 17)
@@ -46,6 +47,7 @@ set(dependencies
   opennav_coverage_msgs
   std_srvs
   realtime_tools
+  nlohmann_json
 )
 
 add_library(${library_name} SHARED

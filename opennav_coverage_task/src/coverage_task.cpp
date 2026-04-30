@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "opennav_coverage_task/coverage_task.hpp"
+#include <nlohmann/json.hpp>
 
 using namespace std::chrono_literals;
 using rcl_interfaces::msg::ParameterType;
@@ -189,11 +190,35 @@ void CoverageTask::do_gen_path()
 
 void CoverageTask::do_exe_path()
 {
+  nlohmann::json root;
+  root["orderId"] = std::string("my_id");
+  nlohmann::json poses = nlohmann::json::array();
+  
   for (unsigned int i = 0; i != coverage_path_swaths_.size(); i++)
   {
     auto & swath = coverage_path_swaths_[i];
     RCLCPP_INFO(get_logger(), "Swath %u: start(%.2f, %.2f), end(%.2f, %.2f)", i, swath.start.x, swath.start.y, swath.end.x, swath.end.y);
+
+    nlohmann::json pose;
+    pose["x"] = swath.start.x;
+    pose["y"] = swath.start.y;
+    pose["angle"] = 0.0;
+    poses.push_back(pose);
+
+    pose["x"] = swath.end.x;
+    pose["y"] = swath.end.y;
+    pose["angle"] = 0.0;    
+    poses.push_back(pose);
   }
+
+  root["poses"] = poses;
+
+  std::string msg = root.dump();
+  RCLCPP_INFO(get_logger(), "Generated JSON: %s", msg.c_str());
+
+
+
+
 }
 
 nav2_util::CallbackReturn
