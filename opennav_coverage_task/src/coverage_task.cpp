@@ -193,11 +193,10 @@ void CoverageTask::do_exe_path()
   nlohmann::json root;
   root["orderId"] = std::string("my_id");
   nlohmann::json poses = nlohmann::json::array();
-  
+
   for (unsigned int i = 0; i != coverage_path_swaths_.size(); i++)
   {
     auto & swath = coverage_path_swaths_[i];
-    RCLCPP_INFO(get_logger(), "Swath %u: start(%.2f, %.2f), end(%.2f, %.2f)", i, swath.start.x, swath.start.y, swath.end.x, swath.end.y);
 
     nlohmann::json pose;
     pose["x"] = swath.start.x;
@@ -213,8 +212,8 @@ void CoverageTask::do_exe_path()
 
   root["poses"] = poses;
 
-  std::string msg = root.dump();
-  RCLCPP_INFO(get_logger(), "Generated JSON: %s", msg.c_str());
+  std::string json_poses = root.dump();
+  RCLCPP_INFO(get_logger(), "Generated JSON: %s", json_poses.c_str());
 
 
 
