@@ -130,6 +130,7 @@ void CoverageTask::do_gen_path()
   if (!coverage_client_->wait_for_action_server(5s)) 
   {
       RCLCPP_ERROR(get_logger(), "Action server not available after waiting");
+      return;
   }
 
   auto send_goal_options = rclcpp_action::Client<opennav_coverage_msgs::action::ComputeCoveragePath>::SendGoalOptions();
@@ -185,7 +186,7 @@ void CoverageTask::do_gen_path()
       }
     };
 
-    coverage_client_->async_send_goal(goal_, send_goal_options);
+  coverage_client_->async_send_goal(goal_, send_goal_options);
 }
 
 void CoverageTask::do_exe_path()
@@ -215,9 +216,77 @@ void CoverageTask::do_exe_path()
   std::string json_poses = root.dump();
   RCLCPP_INFO(get_logger(), "Generated JSON: %s", json_poses.c_str());
 
+  rics_navigation_behavior_msgs::action::MoveThroughPoses::Goal goal_;
+  goal_.json_poses = json_poses;
 
+  if (!move_through_poses_client_->wait_for_action_server(5s)) 
+  {
+      RCLCPP_ERROR(get_logger(), "Action server not available after waiting");
+      return;
+  }
+ 
+  auto send_goal_options = rclcpp_action::Client<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SendGoalOptions();
 
+  send_goal_options.goal_response_callback =
+    [this](std::shared_ptr<rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>> goal_handle)
+    {
+      if (!goal_handle) 
+      {
+        RCLCPP_ERROR(get_logger(), "Goal was rejected by server");
+      } 
+      else 
+      {
+        RCLCPP_INFO(get_logger(), "Goal accepted by server");
+      }
+    };
 
+  send_goal_options.feedback_callback =
+    [this](rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SharedPtr,
+            const std::shared_ptr<const rics_navigation_behavior_msgs::action::MoveThroughPoses::Feedback> feedback)
+    {
+      if (feedback) 
+      {
+        RCLCPP_INFO(get_logger(), "Received feedback");
+        // feedback->current_node_id;
+        // feedback->goal_node_id;
+        // feedback->current_pose;
+        // feedback->navigation_time;
+        // feedback->estimated_time_remaining;
+        // feedback->number_of_recoveries;
+        // feedback->distance_remaining;
+        // feedback->number_of_poses_remaining;
+      }
+    };
+
+  send_goal_options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::WrappedResult & result)
+    {
+      switch (result.code) 
+      {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        RCLCPP_INFO(get_logger(), "Goal succeeded");
+        break;
+      case rclcpp_action::ResultCode::ABORTED:
+        RCLCPP_ERROR(get_logger(), "Goal was aborted");
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        RCLCPP_ERROR(get_logger(), "Goal was canceled");
+        break;
+      default:
+        RCLCPP_ERROR(get_logger(), "Unknown result code");
+        break;
+      }
+
+      // Print a brief summary if the action defines a result
+      if (result.result) 
+      {
+        RCLCPP_INFO(get_logger(), "Result received error_code: %s ", result.result->result_code.c_str());
+      }
+    };
+  
+  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+
+  // auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
 }
 
 nav2_util::CallbackReturn
@@ -233,9 +302,9 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
   coverage_path_pub_ = rclcpp::create_publisher<visualization_msgs::msg::MarkerArray>(
     this,
     "coverage_task/coverage_path", rclcpp::QoS(1));
-
+  
   coverage_client_ = rclcpp_action::create_client<opennav_coverage_msgs::action::ComputeCoveragePath>(this, "compute_coverage_path");
-  through_poses_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateThroughPoses>(this, "navigate_through_poses");
+  move_through_poses_client_ = rclcpp_action::create_client<rics_navigation_behavior_msgs::action::MoveThroughPoses>(this, "move_through_poses");
   
   gen_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
     std::string("coverage_task/gen_path"),

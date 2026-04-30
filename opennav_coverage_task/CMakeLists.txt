@@ -15,6 +15,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(opennav_coverage_msgs REQUIRED)
+find_package(rics_navigation_behavior_msgs REQUIRED)
 find_package(Fields2Cover REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(realtime_tools REQUIRED)
@@ -45,6 +46,7 @@ set(dependencies
   builtin_interfaces
   tf2_ros
   opennav_coverage_msgs
+  rics_navigation_behavior_msgs
   std_srvs
   realtime_tools
   nlohmann_json

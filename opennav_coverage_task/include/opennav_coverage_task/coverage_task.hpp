@@ -14,7 +14,7 @@
 #include "geometry_msgs/msg/polygon.hpp"
 #include "geometry_msgs/msg/polygon_stamped.hpp"
 #include <visualization_msgs/msg/marker_array.hpp>
-#include "nav2_msgs/action/navigate_through_poses.hpp"
+#include "rics_navigation_behavior_msgs/action/move_through_poses.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include "realtime_tools/realtime_buffer.hpp"
 #include "semaphore.hpp"
@@ -68,7 +68,7 @@ protected:
 
 private:
   rclcpp_action::Client<opennav_coverage_msgs::action::ComputeCoveragePath>::SharedPtr coverage_client_;
-  rclcpp_action::Client<nav2_msgs::action::NavigateThroughPoses>::SharedPtr through_poses_client_;
+  rclcpp_action::Client<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SharedPtr move_through_poses_client_;
 
   rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr field_sub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr coverage_path_pub_;

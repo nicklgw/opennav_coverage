@@ -21,7 +21,8 @@
   <depend>tf2_ros</depend>
   <depend>fields2cover</depend>
   <depend>opennav_coverage_msgs</depend>
-  <depend>std_srvs</depend>  
+  <depend>rics_navigation_behavior_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>realtime_tools</depend>
   <depend>nlohmann-json-dev</depend>
 
