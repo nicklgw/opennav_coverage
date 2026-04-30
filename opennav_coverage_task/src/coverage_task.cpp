@@ -189,7 +189,11 @@ void CoverageTask::do_gen_path()
 
 void CoverageTask::do_exe_path()
 {
-  
+  for (unsigned int i = 0; i != coverage_path_swaths_.size(); i++)
+  {
+    auto & swath = coverage_path_swaths_[i];
+    RCLCPP_INFO(get_logger(), "Swath %u: start(%.2f, %.2f), end(%.2f, %.2f)", i, swath.start.x, swath.start.y, swath.end.x, swath.end.y);
+  }
 }
 
 nav2_util::CallbackReturn
@@ -256,6 +260,9 @@ void CoverageTask::exePathCb(
   (void)request_header;
   (void)request;
   (void)response;
+
+  exe_path_requested_  = true;
+
   response->success = true;
   
   RCLCPP_INFO(get_logger(), "Received request to execute coverage path");

@@ -10,7 +10,8 @@ requester: making request: std_srvs.srv.Trigger_Request()
 response:
 std_srvs.srv.Trigger_Response(success=True, message='')
 
-nick@nick-dell:~$ ros2 service call /coverage_task/gen_path std_srvs/srv/Trigger '{}'
+执行全覆盖路径
+nick@nick-dell:~$ ros2 service call /coverage_task/exe_path std_srvs/srv/Trigger '{}'
 requester: making request: std_srvs.srv.Trigger_Request()
 
 response:
