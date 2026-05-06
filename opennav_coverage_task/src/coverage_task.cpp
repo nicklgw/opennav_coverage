@@ -85,9 +85,16 @@ void CoverageTask::do_gen_path()
 {
   geometry_msgs::msg::PolygonStamped polygon_msg = **(field_polygon_.readFromRT());
 
+  if (polygon_msg.polygon.points.size() != 4)
+  {
+    RCLCPP_ERROR(get_logger(), "reflector_polygon hasn't 4 vertexs.");
+    return;
+  }
+
   polygon_msg.header.stamp = this->now();
   polygon_msg.header.frame_id = "map";
-  
+
+#if 0
   polygon_msg.polygon.points.clear();
 
   geometry_msgs::msg::Point32 point;
@@ -106,6 +113,7 @@ void CoverageTask::do_gen_path()
 
   point.x = 0.0; point.y = 0.0; point.z = 0.0;
   polygon_msg.polygon.points.push_back(point);
+#endif
 
   opennav_coverage_msgs::action::ComputeCoveragePath::Goal goal_;
 
@@ -125,7 +133,14 @@ void CoverageTask::do_gen_path()
     coord.axis1 = polygon_msg.polygon.points[j].x;
     coord.axis2 = polygon_msg.polygon.points[j].y;
     goal_.polygons[0].coordinates.push_back(coord);
+
+    RCLCPP_INFO(get_logger(), "polygon.point %u, %.3f, %.3f", j, polygon_msg.polygon.points[j].x, polygon_msg.polygon.points[j].y);
   }
+  
+  opennav_coverage_msgs::msg::Coordinate coord;
+  coord.axis1 = polygon_msg.polygon.points[0].x;
+  coord.axis2 = polygon_msg.polygon.points[0].y;
+  goal_.polygons[0].coordinates.push_back(coord);
 
   if (!coverage_client_->wait_for_action_server(5s)) 
   {
@@ -284,7 +299,7 @@ void CoverageTask::do_exe_path()
       }
     };
   
-  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+//  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
 
   // auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
 }
@@ -304,7 +319,7 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
     "coverage_task/coverage_path", rclcpp::QoS(1));
   
   coverage_client_ = rclcpp_action::create_client<opennav_coverage_msgs::action::ComputeCoveragePath>(this, "compute_coverage_path");
-  move_through_poses_client_ = rclcpp_action::create_client<rics_navigation_behavior_msgs::action::MoveThroughPoses>(this, "move_through_poses");
+  move_through_poses_client_ = rclcpp_action::create_client<rics_navigation_behavior_msgs::action::MoveThroughPoses>(this, "/rics_behavior/NavigationBehavior/MoveThroughPoses");
   
   gen_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
     std::string("coverage_task/gen_path"),

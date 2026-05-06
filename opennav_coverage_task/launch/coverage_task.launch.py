@@ -43,6 +43,6 @@ def generate_launch_description():
         launch_arguments={'params_file': param_file_path}.items())
 
     ld = LaunchDescription()
-    ld.add_action(rviz_cmd)
+#    ld.add_action(rviz_cmd)
     ld.add_action(bringup_cmd)
     return ld
