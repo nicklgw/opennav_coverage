@@ -96,6 +96,8 @@ private:
 
   realtime_tools::RealtimeBuffer<std::shared_ptr<geometry_msgs::msg::PolygonStamped>> field_polygon_;
   
+  double nav_fixed_angle_{0.0};
+
   std::shared_ptr<std::thread> thread_;
   volatile bool do_stop_{false};
   int period_ms_{100};

@@ -32,7 +32,10 @@ CoverageTask::on_configure(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Configuring %s", get_name());
   auto node = shared_from_this();
-
+  
+  declare_parameter("nav_fixed_angle", 0.0);
+  nav_fixed_angle_ = get_parameter("nav_fixed_angle").as_double();
+  
   declare_parameter("frequency", 20.0);
   double frequency = get_parameter("frequency").as_double();
   period_ms_ = 1000.0 / frequency;
@@ -224,12 +227,12 @@ void CoverageTask::do_exe_path()
     nlohmann::json pose;
     pose["x"] = swath.start.x;
     pose["y"] = swath.start.y;
-    pose["angle"] = 0.0;
+    pose["angle"] = nav_fixed_angle_;
     poses.push_back(pose);
 
     pose["x"] = swath.end.x;
     pose["y"] = swath.end.y;
-    pose["angle"] = 0.0;    
+    pose["angle"] = nav_fixed_angle_;    
     poses.push_back(pose);
   }
 
