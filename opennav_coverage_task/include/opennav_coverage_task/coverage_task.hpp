@@ -75,6 +75,7 @@ private:
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr gen_path_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr exe_path_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr cnl_path_srv_; // 取消路径执行的服务，暂未实现
 
   void fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg);
 
@@ -84,6 +85,11 @@ private:
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
   void exePathCb(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
+  void cnlPathCb(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
@@ -99,13 +105,15 @@ private:
 
   details::Semaphore semaphore_;
 
-  std::atomic_bool gen_path_requested_{false};
   std::vector<opennav_coverage_msgs::msg::Swath> coverage_path_swaths_;
 
+  std::atomic_bool gen_path_requested_{false};
   std::atomic_bool exe_path_requested_{false};
+  std::atomic_bool cnl_path_requested_{false};
 
   void do_gen_path();
   void do_exe_path();
+  void do_cnl_path();
 };
 
 }  // namespace opennav_coverage_task

@@ -18,6 +18,13 @@ response:
 std_srvs.srv.Trigger_Response(success=True, message='')
 
 
+取消执行全覆盖路径
+nick@nick-dell:~$ ros2 service call /coverage_task/cnl_path std_srvs/srv/Trigger '{}'
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='')
+
 
 /rics_behavior/NavigationBehavior/MoveThroughPoses: rics_navigation_behavior_msgs/action/MoveThroughPoses
 

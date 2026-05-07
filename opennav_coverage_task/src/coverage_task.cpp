@@ -68,6 +68,13 @@ void CoverageTask::run_()
       exe_path_requested_ = false;
     }
 
+    if (cnl_path_requested_)
+    {
+      do_cnl_path();
+
+      cnl_path_requested_ = false;
+    }
+
     semaphore_.waitUntil(end);
   }
 }
@@ -85,16 +92,16 @@ void CoverageTask::do_gen_path()
 {
   geometry_msgs::msg::PolygonStamped polygon_msg = **(field_polygon_.readFromRT());
 
+  polygon_msg.header.stamp = this->now();
+  polygon_msg.header.frame_id = "map";
+
+#if 1
   if (polygon_msg.polygon.points.size() != 4)
   {
     RCLCPP_ERROR(get_logger(), "reflector_polygon hasn't 4 vertexs.");
     return;
   }
-
-  polygon_msg.header.stamp = this->now();
-  polygon_msg.header.frame_id = "map";
-
-#if 0
+#else
   polygon_msg.polygon.points.clear();
 
   geometry_msgs::msg::Point32 point;
@@ -299,9 +306,12 @@ void CoverageTask::do_exe_path()
       }
     };
   
-//  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+}
 
-  // auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
+void CoverageTask::do_cnl_path()
+{
+  auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
 }
 
 nav2_util::CallbackReturn
@@ -333,6 +343,12 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
       &CoverageTask::exePathCb, this,
       std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
   
+  cnl_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
+    std::string("coverage_task/cnl_path"),
+    std::bind(
+      &CoverageTask::cnlPathCb, this,
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
   // create bond connection
   createBond();
   
@@ -374,6 +390,22 @@ void CoverageTask::exePathCb(
   response->success = true;
   
   RCLCPP_INFO(get_logger(), "Received request to execute coverage path");
+}
+
+void CoverageTask::cnlPathCb(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request_header;
+  (void)request;
+  (void)response;
+
+  cnl_path_requested_ = true;
+
+  response->success = true;
+
+  RCLCPP_INFO(get_logger(), "Received request to cancel coverage path");
 }
 
 nav2_util::CallbackReturn
