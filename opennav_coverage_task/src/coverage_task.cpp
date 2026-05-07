@@ -268,7 +268,7 @@ void CoverageTask::do_exe_path()
     {
       if (feedback) 
       {
-        RCLCPP_INFO(get_logger(), "Received feedback");
+        // RCLCPP_INFO(get_logger(), "Received feedback");
         // feedback->current_node_id;
         // feedback->goal_node_id;
         // feedback->current_pose;

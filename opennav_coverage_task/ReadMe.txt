@@ -1,7 +1,8 @@
 
 启动脚本
-orangepi@orangepi5plus:~/opennav_ws$ ros2 launch opennav_coverage_task coverage_task.launch.py
-
+orangepi@orangepi5plus:~/opennav_ws$ colcon build
+orangepi@orangepi5plus:~/opennav_ws$ source install/setup.bash # 设置环境变量 
+orangepi@orangepi5plus:~/opennav_ws$ ros2 launch opennav_coverage_task coverage_task.launch.py # 启动脚本
 
 生成全覆盖路径
 nick@nick-dell:~$ ros2 service call /coverage_task/gen_path std_srvs/srv/Trigger '{}'
@@ -27,6 +28,10 @@ std_srvs.srv.Trigger_Response(success=True, message='')
 
 
 /rics_behavior/NavigationBehavior/MoveThroughPoses: rics_navigation_behavior_msgs/action/MoveThroughPoses
+
+
+run_mode=2为自动导航走点模式
+ros2 topic pub /run_mode std_msgs/msg/Int32 '{"data":2}'
 
 
 orangepi@orangepi5plus:~$ ros2 node info /NavigationBehavior
