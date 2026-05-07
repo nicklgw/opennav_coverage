@@ -1,0 +1,15 @@
+[Unit]
+Description=ros2_control nodes
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/bash /opt/ros/humble/share/opennav_coverage_task/launch/coverage_task.sh
+ExecStop=/usr/bin/kill -INT component_container_isolated
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
