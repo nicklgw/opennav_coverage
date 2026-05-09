@@ -14,6 +14,8 @@
 
 #include "opennav_coverage_task/coverage_task.hpp"
 #include <nlohmann/json.hpp>
+#include <cmath>
+#include <limits>
 
 using namespace std::chrono_literals;
 using rcl_interfaces::msg::ParameterType;
@@ -69,6 +71,13 @@ void CoverageTask::run_()
       do_exe_path();
       
       exe_path_requested_ = false;
+    }
+
+    if (exe2_path_requested_)
+    {
+      do_exe2_path();
+      
+      exe2_path_requested_ = false;
     }
 
     if (cnl_path_requested_)
@@ -312,6 +321,157 @@ void CoverageTask::do_exe_path()
   move_through_poses_client_->async_send_goal(goal_, send_goal_options);
 }
 
+void CoverageTask::do_exe2_path()
+{
+  auto current_ptr = current_pose_.readFromRT();
+  if (!current_ptr) {
+    RCLCPP_WARN(get_logger(), "Current pose not available");
+    return;
+  }
+
+  geometry_msgs::msg::PoseStamped current_pose = **(current_ptr);
+
+  if (coverage_path_swaths_.empty()) {
+    RCLCPP_WARN(get_logger(), "No coverage path available to execute");
+    return;
+  }
+
+  double cur_x = current_pose.pose.position.x;
+  double cur_y = current_pose.pose.position.y;
+
+  size_t best_idx = 0;
+  double best_t = 0.0; // projection parameter on segment [0,1]
+  double best_dist = std::numeric_limits<double>::max();
+
+  // For each swath, project current position onto the segment (start->end)
+  for (size_t i = 0; i < coverage_path_swaths_.size(); ++i) {
+    auto &sw = coverage_path_swaths_[i];
+    double ax = sw.start.x;
+    double ay = sw.start.y;
+    double bx = sw.end.x;
+    double by = sw.end.y;
+
+    double vx = bx - ax;
+    double vy = by - ay;
+    double wx = cur_x - ax;
+    double wy = cur_y - ay;
+
+    double vv = vx * vx + vy * vy;
+    double t = 0.0;
+    if (vv > 1e-12) {
+      t = (vx * wx + vy * wy) / vv;
+    }
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+
+    double proj_x = ax + t * vx;
+    double proj_y = ay + t * vy;
+    double dx = proj_x - cur_x;
+    double dy = proj_y - cur_y;
+    double d = std::hypot(dx, dy);
+
+    if (d < best_dist) {
+      best_dist = d;
+      best_idx = i;
+      best_t = t;
+    }
+  }
+
+  RCLCPP_INFO(get_logger(), "Nearest swath index %zu (t=%.3f), distance %.3f", best_idx, best_t, best_dist);
+  nlohmann::json root;
+  root["orderId"] = std::string("my_id");
+  nlohmann::json poses = nlohmann::json::array();
+
+  for (size_t i = best_idx; i < coverage_path_swaths_.size(); ++i) {
+    auto &sw = coverage_path_swaths_[i];
+
+    if (i == best_idx) {
+      double ax = sw.start.x;
+      double ay = sw.start.y;
+      double bx = sw.end.x;
+      double by = sw.end.y;
+      double vx = bx - ax;
+      double vy = by - ay;
+      double proj_x = ax + best_t * vx;
+      double proj_y = ay + best_t * vy;
+
+      nlohmann::json p;
+      // push projection as first pose
+      p["x"] = proj_x; p["y"] = proj_y; p["angle"] = nav_fixed_angle_; poses.push_back(p);
+
+      // then push the remainder of this swath toward the original swath end
+      p["x"] = sw.end.x; p["y"] = sw.end.y; p["angle"] = nav_fixed_angle_; poses.push_back(p);
+    } else {
+      nlohmann::json p;
+      p["x"] = sw.start.x; p["y"] = sw.start.y; p["angle"] = nav_fixed_angle_; poses.push_back(p);
+      p["x"] = sw.end.x; p["y"] = sw.end.y; p["angle"] = nav_fixed_angle_; poses.push_back(p);
+    }
+  }
+
+  root["poses"] = poses;
+
+  std::string json_poses = root.dump();
+  RCLCPP_INFO(get_logger(), "Generated JSON (from nearest point): %s", json_poses.c_str());
+
+  rics_navigation_behavior_msgs::action::MoveThroughPoses::Goal goal_;
+  goal_.json_poses = json_poses;
+
+  if (!move_through_poses_client_->wait_for_action_server(5s)) 
+  {
+      RCLCPP_ERROR(get_logger(), "Action server not available after waiting");
+      return;
+  }
+ 
+  auto send_goal_options = rclcpp_action::Client<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SendGoalOptions();
+
+  send_goal_options.goal_response_callback =
+    [this](std::shared_ptr<rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>> goal_handle)
+    {
+      if (!goal_handle) 
+      {
+        RCLCPP_ERROR(get_logger(), "Goal was rejected by server");
+      } 
+      else 
+      {
+        RCLCPP_INFO(get_logger(), "Goal accepted by server");
+      }
+    };
+
+  send_goal_options.feedback_callback =
+    [this](rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SharedPtr,
+            const std::shared_ptr<const rics_navigation_behavior_msgs::action::MoveThroughPoses::Feedback> feedback)
+    {
+      (void)feedback;
+    };
+
+  send_goal_options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::WrappedResult & result)
+    {
+      switch (result.code) 
+      {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        RCLCPP_INFO(get_logger(), "Goal succeeded");
+        break;
+      case rclcpp_action::ResultCode::ABORTED:
+        RCLCPP_ERROR(get_logger(), "Goal was aborted");
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        RCLCPP_ERROR(get_logger(), "Goal was canceled");
+        break;
+      default:
+        RCLCPP_ERROR(get_logger(), "Unknown result code");
+        break;
+      }
+
+      if (result.result) 
+      {
+        RCLCPP_INFO(get_logger(), "Result received error_code: %s ", result.result->result_code.c_str());
+      }
+    };
+  
+  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+}
+
 void CoverageTask::do_cnl_path()
 {
   auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
@@ -326,6 +486,10 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
   field_sub_ = node->create_subscription<geometry_msgs::msg::PolygonStamped>(
     "/reflector_polygon", rclcpp::QoS(1),
     std::bind(&CoverageTask::fieldPolygonCallback, this, std::placeholders::_1));
+
+  current_pose_sub_ = node->create_subscription<geometry_msgs::msg::PoseStamped>(
+    "/current_pose", rclcpp::QoS(1),
+    std::bind(&CoverageTask::currentPoseCallback, this, std::placeholders::_1));
 
   coverage_path_pub_ = rclcpp::create_publisher<visualization_msgs::msg::MarkerArray>(
     this,
@@ -346,6 +510,12 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
       &CoverageTask::exePathCb, this,
       std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
   
+  exe2_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
+    std::string("coverage_task/exe2_path"),
+    std::bind(
+      &CoverageTask::exe2PathCb, this,
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
   cnl_path_srv_ = node->create_service<std_srvs::srv::Trigger>(
     std::string("coverage_task/cnl_path"),
     std::bind(
@@ -361,6 +531,11 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
 void CoverageTask::fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg)
 {
   field_polygon_.writeFromNonRT(msg);
+}
+
+void CoverageTask::currentPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+{
+  current_pose_.writeFromNonRT(msg);
 }
 
 void CoverageTask::genPathCb(
@@ -389,6 +564,22 @@ void CoverageTask::exePathCb(
   (void)response;
 
   exe_path_requested_  = true;
+
+  response->success = true;
+  
+  RCLCPP_INFO(get_logger(), "Received request to execute coverage path");
+}
+
+void CoverageTask::exe2PathCb(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request_header;
+  (void)request;
+  (void)response;
+
+  exe2_path_requested_  = true;
 
   response->success = true;
   

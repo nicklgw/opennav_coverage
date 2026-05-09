@@ -73,11 +73,15 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr field_sub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr coverage_path_pub_;
 
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr current_pose_sub_;
+
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr gen_path_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr exe_path_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr exe2_path_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr cnl_path_srv_; // 取消路径执行的服务，暂未实现
 
   void fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg);
+  void currentPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
   void genPathCb(
     const std::shared_ptr<rmw_request_id_t> request_header,
@@ -89,13 +93,19 @@ private:
     const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
+  void exe2PathCb(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
   void cnlPathCb(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
   realtime_tools::RealtimeBuffer<std::shared_ptr<geometry_msgs::msg::PolygonStamped>> field_polygon_;
-  
+  realtime_tools::RealtimeBuffer<std::shared_ptr<geometry_msgs::msg::PoseStamped>> current_pose_;
+
   double nav_fixed_angle_{0.0};
 
   std::shared_ptr<std::thread> thread_;
@@ -111,10 +121,12 @@ private:
 
   std::atomic_bool gen_path_requested_{false};
   std::atomic_bool exe_path_requested_{false};
+  std::atomic_bool exe2_path_requested_{false};
   std::atomic_bool cnl_path_requested_{false};
 
   void do_gen_path();
-  void do_exe_path();
+  void do_exe_path();   
+  void do_exe2_path(); // 找到最近的一条直线,从当前位姿出发沿着这条直线执行覆盖路径, 直到覆盖路径结束或者接收到取消命令
   void do_cnl_path();
 };
 
