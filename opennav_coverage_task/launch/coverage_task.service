@@ -1,12 +1,12 @@
 [Unit]
-Description=ros2_control nodes
+Description=coverage_task nodes
 After=network.target
 
 [Service]
 Type=simple
-User=root
+User=orangepi
 ExecStart=/usr/bin/bash /opt/ros/humble/share/opennav_coverage_task/launch/coverage_task.sh
-ExecStop=/usr/bin/kill -INT component_container_isolated
+ExecStop=/usr/bin/killall -9 component_container_isolated
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=5

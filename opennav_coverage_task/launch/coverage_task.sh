@@ -2,6 +2,7 @@
 
 export ROS_DOMAIN_ID=5
 source /opt/ros/humble/setup.bash
+source /opt/rics/setup.bash
 export ROS_LOCALHOST_ONLY=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
