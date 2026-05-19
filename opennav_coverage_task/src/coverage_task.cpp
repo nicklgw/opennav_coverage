@@ -42,6 +42,12 @@ CoverageTask::on_configure(const rclcpp_lifecycle::State & /*state*/)
   double frequency = get_parameter("frequency").as_double();
   period_ms_ = 1000.0 / frequency;
 
+  { // 初始化defect_poses_，避免在后续使用时出现空指针
+    auto poses_msg = std::make_shared<geometry_msgs::msg::PoseArray>();
+    poses_msg->poses.push_back(geometry_msgs::msg::Pose());
+    defected_poses_.writeFromNonRT(poses_msg);
+  }
+
   { // 初始化field_polygon_，避免在后续使用时出现空指针
     auto polygon_msg = std::make_shared<geometry_msgs::msg::PolygonStamped>();
     polygon_msg->polygon.points.push_back(geometry_msgs::msg::Point32());
@@ -85,6 +91,13 @@ void CoverageTask::run_()
       do_cnl_path();
 
       cnl_path_requested_ = false;
+    }
+
+    if (defected_poses_requested_)
+    {
+      do_defected_poses();
+
+      defected_poses_requested_ = false;
     }
 
     semaphore_.waitUntil(end);
@@ -477,11 +490,111 @@ void CoverageTask::do_cnl_path()
   auto cancel_future = move_through_poses_client_->async_cancel_all_goals();
 }
 
+void CoverageTask::do_defected_poses()
+{
+  geometry_msgs::msg::PoseArray defected_poses_msg = **(defected_poses_.readFromRT());
+
+  RCLCPP_INFO(get_logger(), "Defected poses count: %zu", defected_poses_msg.poses.size());
+
+  nlohmann::json root;
+  root["orderId"] = std::string("my_id");
+  nlohmann::json poses = nlohmann::json::array();
+
+  for (size_t i = 0; i < defected_poses_msg.poses.size(); ++i) 
+  {
+    auto &pose = defected_poses_msg.poses[i];
+    nlohmann::json p;
+    p["x"] = pose.position.x;
+    p["y"] = pose.position.y;
+    p["angle"] = nav_fixed_angle_;
+    poses.push_back(p);
+  }
+
+  root["poses"] = poses;
+
+  std::string json_poses = root.dump();
+  RCLCPP_INFO(get_logger(), "Generated JSON: %s", json_poses.c_str());
+
+  rics_navigation_behavior_msgs::action::MoveThroughPoses::Goal goal_;
+  goal_.json_poses = json_poses;
+
+  if (!move_through_poses_client_->wait_for_action_server(5s)) 
+  {
+      RCLCPP_ERROR(get_logger(), "Action server not available after waiting");
+      return;
+  }
+ 
+  auto send_goal_options = rclcpp_action::Client<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SendGoalOptions();
+
+  send_goal_options.goal_response_callback =
+    [this](std::shared_ptr<rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>> goal_handle)
+    {
+      if (!goal_handle) 
+      {
+        RCLCPP_ERROR(get_logger(), "Goal was rejected by server");
+      } 
+      else 
+      {
+        RCLCPP_INFO(get_logger(), "Goal accepted by server");
+      }
+    };
+
+  send_goal_options.feedback_callback =
+    [this](rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::SharedPtr,
+            const std::shared_ptr<const rics_navigation_behavior_msgs::action::MoveThroughPoses::Feedback> feedback)
+    {
+      if (feedback) 
+      {
+        // RCLCPP_INFO(get_logger(), "Received feedback");
+        // feedback->current_node_id;
+        // feedback->goal_node_id;
+        // feedback->current_pose;
+        // feedback->navigation_time;
+        // feedback->estimated_time_remaining;
+        // feedback->number_of_recoveries;
+        // feedback->distance_remaining;
+        // feedback->number_of_poses_remaining;
+      }
+    };
+
+  send_goal_options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<rics_navigation_behavior_msgs::action::MoveThroughPoses>::WrappedResult & result)
+    {
+      switch (result.code) 
+      {
+      case rclcpp_action::ResultCode::SUCCEEDED:
+        RCLCPP_INFO(get_logger(), "Goal succeeded");
+        break;
+      case rclcpp_action::ResultCode::ABORTED:
+        RCLCPP_ERROR(get_logger(), "Goal was aborted");
+        break;
+      case rclcpp_action::ResultCode::CANCELED:
+        RCLCPP_ERROR(get_logger(), "Goal was canceled");
+        break;
+      default:
+        RCLCPP_ERROR(get_logger(), "Unknown result code");
+        break;
+      }
+
+      // Print a brief summary if the action defines a result
+      if (result.result) 
+      {
+        RCLCPP_INFO(get_logger(), "Result received error_code: %s ", result.result->result_code.c_str());
+      }
+    };
+  
+  move_through_poses_client_->async_send_goal(goal_, send_goal_options);
+}
+
 nav2_util::CallbackReturn
 CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Activating %s", get_name());
   auto node = shared_from_this();
+
+  defected_poses_sub_ = node->create_subscription<geometry_msgs::msg::PoseArray>(
+    "/defected_poses", rclcpp::QoS(1),
+    std::bind(&CoverageTask::defectedPosesCallback, this, std::placeholders::_1));
 
   field_sub_ = node->create_subscription<geometry_msgs::msg::PolygonStamped>(
     "/reflector_polygon", rclcpp::QoS(1),
@@ -522,10 +635,21 @@ CoverageTask::on_activate(const rclcpp_lifecycle::State & /*state*/)
       &CoverageTask::cnlPathCb, this,
       std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+  defected_poses_srv_ = node->create_service<std_srvs::srv::Trigger>(
+    std::string("coverage_task/defected_poses"),
+    std::bind(
+      &CoverageTask::defectedPosesCb, this,
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
   // create bond connection
   createBond();
   
   return nav2_util::CallbackReturn::SUCCESS;
+}
+
+void CoverageTask::defectedPosesCallback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
+{
+  defected_poses_.writeFromNonRT(msg);
 }
 
 void CoverageTask::fieldPolygonCallback(const geometry_msgs::msg::PolygonStamped::SharedPtr msg)
@@ -600,6 +724,20 @@ void CoverageTask::cnlPathCb(
   response->success = true;
 
   RCLCPP_INFO(get_logger(), "Received request to cancel coverage path");
+}
+
+void CoverageTask::defectedPosesCb(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request_header;
+  (void)request;
+  (void)response;
+
+  defected_poses_requested_ = true;
+
+  RCLCPP_INFO(get_logger(), "Received request to defectedPoses");
 }
 
 nav2_util::CallbackReturn
